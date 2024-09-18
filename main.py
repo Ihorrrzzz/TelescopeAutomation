@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from calibration import set_calibration
 from uploader import upload_calibrated_files
 from auth import get_auth_token
@@ -11,6 +11,7 @@ token = ""
 app = None
 calibrated_lights = None
 lights = None
+oname = ""  # Variable for ONAME (determined by camera selection)
 
 # Main application class
 class CalibrationApp:
@@ -19,6 +20,24 @@ class CalibrationApp:
         self.master.title("Telescope Automation")
         self.frame = tk.Frame(self.master)
         self.frame.pack(pady=20, padx=20)
+
+        # Observatory Selection
+        # observatory_label = tk.Label(self.frame, text="Observatory: Lisnyky Observatory AZT-8 70-cm")
+        # observatory_label.pack(side=tk.TOP, padx=10, pady=5)
+
+        observatory_label = tk.Label(self.frame, text="Select Observatory:")
+        observatory_label.pack(side=tk.TOP, padx=10, pady=5)
+
+        observatory_combo = ttk.Combobox(self.frame, values=["Lisnyky Observatory AZT-8 70-cm"], state="readonly")
+        observatory_combo.pack(side=tk.TOP, padx=10, pady=5)
+
+        # Camera Selection Dropdown
+        camera_label = tk.Label(self.frame, text="Select Camera:")
+        camera_label.pack(side=tk.TOP, padx=10, pady=5)
+
+        self.camera_combo = ttk.Combobox(self.frame, values=["FLI PL47-10", "Moravian C4-16000"], state="readonly")
+        self.camera_combo.pack(side=tk.TOP, padx=10, pady=5)
+        self.camera_combo.bind("<<ComboboxSelected>>", self.handle_camera_selection)
 
         # Button to start calibration process
         self.calibration_button = tk.Button(self.frame, text="Calibration", command=self.set_calibration)
@@ -33,6 +52,17 @@ class CalibrationApp:
         self.logout_button = tk.Button(self.frame, text="Logout", command=self.logout, fg="red")
         self.logout_button.pack(padx=10, pady=20)
 
+    def handle_camera_selection(self, event):
+        global oname
+        camera = self.camera_combo.get()
+
+        if camera == "FLI PL47-10":
+            oname = "AZT-8_PL-4710"
+        elif camera == "Moravian C4-16000":
+            oname = "AZT-8_C4-16000"
+        else:
+            oname = ""  # Just in case no camera is selected, but this shouldn't happen
+
     def logout(self):
         delete_credentials()  # Delete stored credentials
         self.master.destroy()  # Close the main window
@@ -46,7 +76,11 @@ class CalibrationApp:
             self.upload_button.config(state=tk.NORMAL)  # Enable the upload button after calibration is done
 
     def upload_calibrated_files(self):
-        global token, lights
+        global token, lights, oname
+        if not oname:
+            messagebox.showerror("Error", "Please select a camera before uploading.")
+            return
+
         folder_selected = filedialog.askdirectory(title="Select Folder Containing Calibrated Files")
         if not folder_selected:
             return
@@ -62,7 +96,7 @@ class CalibrationApp:
             return
 
         try:
-            upload_calibrated_files(calibrated_files, token, target_name, self.master)
+            upload_calibrated_files(calibrated_files, token, target_name, oname, self.master)
         except Exception as e:
             messagebox.showerror("Error", f"Error uploading calibrated files: {e}")
             print(f"Error uploading calibrated files: {e}")
