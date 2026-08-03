@@ -23,6 +23,7 @@ Contract:
   responses, or errors that a retry already recovered from.
 """
 
+import contextlib
 import json
 import os
 import sys
@@ -115,6 +116,13 @@ def report_error(system, error, source="", runtime="python"):
             )
             return False
         return True
-    except Exception:
-        # Deliberately blind: reporting must never crash the host app.
+    except Exception as reporting_error:
+        # Deliberately blind: reporting must never crash the host app — but it
+        # must not fail silently either (a dropped report looks like "no
+        # errors"). Reporter-side reason only; never the token.
+        with contextlib.suppress(Exception):
+            print(
+                f"slack_error_reporter: report NOT delivered ({reporting_error!r})",
+                file=sys.stderr,
+            )
         return False
