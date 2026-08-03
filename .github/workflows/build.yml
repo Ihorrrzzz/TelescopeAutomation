@@ -42,6 +42,23 @@ jobs:
           name: BHTOM-Uploader-windows-setup
           path: dist/BHTOM-Uploader-Setup-*.exe
 
+      # AA-241: centralized error reporting — build failures go to Slack
+      # #bug-hunters (channel ID C0BL8330ABV, never the name).
+      - name: Report failure to Slack
+        if: failure()
+        shell: bash
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          ERROR_SLACK_BOT_TOKEN: ${{ secrets.ERROR_SLACK_BOT_TOKEN }}   # AA-241 shared reporting bot
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          jq -n --arg text "🔴 bh-tom-uploader: windows build failed <@U0B4U0WCG0K> — $RUN_URL" \
+            '{channel: "C0BL8330ABV", text: $text, unfurl_links: false}' \
+          | curl -s -m 10 -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer ${ERROR_SLACK_BOT_TOKEN:-$SLACK_BOT_TOKEN}" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              --data @-
+
   macos:
     name: macOS DMG (${{ matrix.arch }})
     strategy:
@@ -90,3 +107,19 @@ jobs:
         with:
           name: BHTOM-Uploader-macos-${{ matrix.arch }}
           path: dist/BHTOM-Uploader-*.dmg
+
+      # AA-241: centralized error reporting — build failures go to Slack
+      # #bug-hunters (channel ID C0BL8330ABV, never the name).
+      - name: Report failure to Slack
+        if: failure()
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          ERROR_SLACK_BOT_TOKEN: ${{ secrets.ERROR_SLACK_BOT_TOKEN }}   # AA-241 shared reporting bot
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          jq -n --arg text "🔴 bh-tom-uploader: macos ${{ matrix.arch }} build failed <@U0B4U0WCG0K> — $RUN_URL" \
+            '{channel: "C0BL8330ABV", text: $text, unfurl_links: false}' \
+          | curl -s -m 10 -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer ${ERROR_SLACK_BOT_TOKEN:-$SLACK_BOT_TOKEN}" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              --data @-

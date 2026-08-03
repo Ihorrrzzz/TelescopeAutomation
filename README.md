@@ -174,3 +174,17 @@ Data uploaded/downloaded via BHTOM is subject to the BHTOM data policy:
 > The data was obtained via [BHTOM](https://bhtom.space), which has received funding from the
 > European Union's Horizon 2020 research and innovation program under grant agreement
 > No. 101004719 (OPTICON-RadioNet Pilot).
+
+## Error reporting (AA-241)
+
+Unhandled errors in the entry point are posted to Slack **#bug-hunters**
+(channel ID `C0BL8330ABV`) via `slack_error_reporter.py`; the build workflow
+posts a failure alert with the run URL for each failed job.
+
+- Token: `SLACK_BOT_TOKEN` env var / GitHub Actions secret — never hardcoded
+  and **never bundled into the installer**: on end-user machines the reporter
+  is a silent no-op.
+- Reporting is non-blocking (5 s timeout) and can never crash the app.
+  No secrets/PII: exception first line + stack only.
+- Synthetic test: `SYNTHETIC_ERROR=1 python main.py` (raises before the UI
+  starts, reports, then re-raises).

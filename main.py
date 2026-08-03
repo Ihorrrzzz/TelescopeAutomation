@@ -45,4 +45,20 @@ if __name__ == "__main__":
         raise SystemExit(_smoke())
     from bhtom_uploader.app import run
 
-    raise SystemExit(run())
+    try:
+        # AA-241 synthetic test path: SYNTHETIC_ERROR=1 raises before the UI
+        # starts so the Slack error-reporting chain can be verified end-to-end.
+        import os
+
+        if os.environ.get("SYNTHETIC_ERROR"):
+            raise RuntimeError("SYNTHETIC_ERROR test - verifying Slack error reporting (AA-241); safe to ignore")
+        raise SystemExit(run())
+    except SystemExit:
+        raise
+    except Exception as err:  # AA-241: report unhandled errors to #bug-hunters, then re-raise
+        # On end-user machines SLACK_BOT_TOKEN is absent, so this is a silent
+        # no-op there — the token is never bundled into the installer.
+        from slack_error_reporter import report_error
+
+        report_error(system="bh-tom-uploader", error=err, source="main.py run()")
+        raise
