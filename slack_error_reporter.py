@@ -1,7 +1,8 @@
 """Centralized Slack error reporter — posts unhandled errors to #bug-hunters.
 
-Canonical module (AA-241). Copied as-is into every YozmaTech automation repo.
-Do not edit per-repo copies; fix here and re-sync.
+Canonical module (AA-241). Home: github.com/YozmaTech-dev/error-reporter.
+Copied as-is into every YozmaTech automation repo — do not edit per-repo
+copies; fix in the home repo and re-sync.
 
 Usage:
     from slack_error_reporter import report_error
@@ -12,7 +13,9 @@ Usage:
         raise
 
 Contract:
-- Token comes from the SLACK_BOT_TOKEN env var. Missing token => silent no-op.
+- Token resolution: ERROR_SLACK_BOT_TOKEN first (the shared "AI Automation
+  Errors" bot, already a member of #bug-hunters), then SLACK_BOT_TOKEN
+  (the repo's own bot). Missing both => silent no-op.
 - NEVER raises into the host app; every failure path returns False.
 - Network call is bounded by a 5 s timeout.
 - No secrets / PII in the payload: exception first line + stack trace only.
@@ -43,35 +46,55 @@ def report_error(system, error, source="", runtime="python"):
     Returns True only if Slack accepted the message.
     """
     try:
-        token = (os.environ.get("SLACK_BOT_TOKEN") or "").strip()
+        token = (
+            os.environ.get("ERROR_SLACK_BOT_TOKEN") or os.environ.get("SLACK_BOT_TOKEN") or ""
+        ).strip()
         if not token:
             return False
 
-        first_line = (str(error).strip().splitlines() or [error.__class__.__name__])[0]
-        first_line = "%s: %s" % (error.__class__.__name__, first_line) if str(error).strip() else error.__class__.__name__
+        message = str(error).strip()
+        head = message.splitlines()[0] if message else ""
+        cls = error.__class__.__name__
+        first_line = f"{cls}: {head}" if head else cls
         trace = "".join(traceback.format_exception(type(error), error, error.__traceback__))
         if len(trace) > _MAX_TRACE_CHARS:
             trace = "…" + trace[-_MAX_TRACE_CHARS:]
         trace = trace.replace("```", "'''")
         when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        src = source or "unknown"
 
         payload = {
             "channel": SLACK_CHANNEL_ID,
             "unfurl_links": False,
             "unfurl_media": False,
-            "text": ":red_circle: %s: %s" % (system, first_line),
+            "text": f":red_circle: {system}: {first_line}",
             "blocks": [
-                {"type": "section", "text": {"type": "mrkdwn",
-                 "text": ":red_circle: *%s* — unhandled error <@%s>" % (system, OWNER_SLACK_ID)}},
-                {"type": "section", "fields": [
-                    {"type": "mrkdwn", "text": "*Runtime:*\n%s" % runtime},
-                    {"type": "mrkdwn", "text": "*Source:*\n%s" % (source or "unknown")},
-                    {"type": "mrkdwn", "text": "*When (UTC):*\n%s" % when},
-                    {"type": "mrkdwn", "text": "*Error:*\n%s" % first_line[:250]},
-                ]},
-                {"type": "section", "text": {"type": "mrkdwn", "text": "```%s```" % trace}},
-                {"type": "context", "elements": [{"type": "mrkdwn",
-                 "text": "AA-241 error-report • sys=%s • rt=%s • src=%s" % (system, runtime, source or "unknown")}]},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f":red_circle: *{system}* — unhandled error <@{OWNER_SLACK_ID}>",
+                    },
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*Runtime:*\n{runtime}"},
+                        {"type": "mrkdwn", "text": f"*Source:*\n{src}"},
+                        {"type": "mrkdwn", "text": f"*When (UTC):*\n{when}"},
+                        {"type": "mrkdwn", "text": f"*Error:*\n{first_line[:250]}"},
+                    ],
+                },
+                {"type": "section", "text": {"type": "mrkdwn", "text": f"```{trace}```"}},
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"AA-241 error-report • sys={system} • rt={runtime} • src={src}",
+                        }
+                    ],
+                },
             ],
         }
 
@@ -79,7 +102,7 @@ def report_error(system, error, source="", runtime="python"):
             _API_URL,
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": "Bearer %s" % token,
+                "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json; charset=utf-8",
             },
             method="POST",
@@ -87,5 +110,5 @@ def report_error(system, error, source="", runtime="python"):
         with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
         return bool(body.get("ok"))
-    except Exception:
-        return False  # reporting must never crash the host app
+    except Exception:  # noqa: BLE001 — reporting must never crash the host app
+        return False
