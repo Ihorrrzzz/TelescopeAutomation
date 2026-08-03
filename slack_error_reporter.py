@@ -62,6 +62,7 @@ def report_error(system, error, source="", runtime="python"):
         trace = trace.replace("```", "'''")
         when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         src = source or "unknown"
+        context_line = f"AA-241 error-report • sys={system} • rt={runtime} • src={src}"
 
         payload = {
             "channel": SLACK_CHANNEL_ID,
@@ -88,12 +89,7 @@ def report_error(system, error, source="", runtime="python"):
                 {"type": "section", "text": {"type": "mrkdwn", "text": f"```{trace}```"}},
                 {
                     "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": f"AA-241 error-report • sys={system} • rt={runtime} • src={src}",
-                        }
-                    ],
+                    "elements": [{"type": "mrkdwn", "text": context_line}],
                 },
             ],
         }
@@ -110,5 +106,6 @@ def report_error(system, error, source="", runtime="python"):
         with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
         return bool(body.get("ok"))
-    except Exception:  # noqa: BLE001 — reporting must never crash the host app
+    except Exception:
+        # Deliberately blind: reporting must never crash the host app.
         return False
