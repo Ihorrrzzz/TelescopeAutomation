@@ -25,6 +25,7 @@ Contract:
 
 import json
 import os
+import sys
 import traceback
 import urllib.request
 from datetime import datetime, timezone
@@ -105,7 +106,15 @@ def report_error(system, error, source="", runtime="python"):
         )
         with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
-        return bool(body.get("ok"))
+        if not body.get("ok"):
+            # A silently-dropped report is worse than a noisy one: say why on
+            # stderr (Slack error codes only, never the token).
+            print(
+                f"slack_error_reporter: report NOT delivered ({body.get('error')})",
+                file=sys.stderr,
+            )
+            return False
+        return True
     except Exception:
         # Deliberately blind: reporting must never crash the host app.
         return False
